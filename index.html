@@ -1,0 +1,384 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>Better than the future they promise’d you</title>
+    <meta charset="utf-8">
+    <style>
+      @import url(https://fonts.googleapis.com/css?family=Yanone+Kaffeesatz);
+      @import url(https://fonts.googleapis.com/css?family=Droid+Serif:400,700,400italic);
+      @import url(https://fonts.googleapis.com/css?family=Ubuntu+Mono:400,700,400italic);
+
+      body {
+        font-family: 'Arial';
+        color: white;
+      }
+      h1, h2, h3 {
+        font-family: 'Arial';
+        font-weight: normal;
+        line-height: 120%;
+        color: #5ca646;
+      }
+      .remark-code, .remark-inline-code { font-family: 'Ubuntu Mono'; }
+      .remark-slide-content {
+        font-size: 24px;
+        line-height: 150%;
+        background-color: black;
+      }
+      a {
+        color: lightblue;
+      }
+    </style>
+  </head>
+  <body>
+<div class="helper-lines">
+  <div class="helper-line" style="top:33%;height:2px"></div>
+  <div class="helper-line" style="top:67%;height:2px"></div>
+  <div class="helper-line" style="left:33%;width:2px"></div>
+  <div class="helper-line" style="left:67%;width:2px"></div>
+</div>
+    <textarea id="source">
+
+class: center, middle
+
+# Better than the future they promise’d you
+
+Anna Henningsen <br />
+sie/she <br />
+@addaleax
+
+Slides @ https://addaleax.net/promises-talk/
+
+<br />
+
+Node.js TSC <br />
+Aktiv als Node.js-Contributor seit Dezember 2015
+
+---
+
+# Das Problem: Dateien mit Python lesen
+
+```python
+def readFile(filename):
+  file = open(filename)
+  content = file.read()
+  file.close()
+  return content
+```
+
+---
+
+# Das Problem: Dateien mit Node.js lesen
+
+(vor ca. 3 Jahren)
+
+```js
+function readFile(filename, cb) {
+  fs.open('index.html', (err, fd) => {
+    if (err) return cb(err);
+    fs.readFile(fd, { encoding: 'utf8' }, (err, data) => {
+      if (err) return cb(err);
+      fs.close(fd, (err) => {
+        if (err) return cb(err);
+        cb(null, data);
+      });
+    });
+  });
+}
+```
+
+---
+
+# Wo sind die Unterschiede?
+
+- Synchrone Operationen: Mach etwas, warte bis es fertig ist, dann mach etwas anderes
+  - … schön einfach!
+- Asynchrone Operationen: Fang etwas an und übergib eine Funktion die danach aufgerufen wird
+  - Oft bessere Performance
+  - Einfacher, für parallelen I/O zu programmieren
+
+---
+
+# Callbacks können kompliziert werden
+
+- Geschachtelte Callbacks für serielle Abläufe
+  - Callback Hell 😞
+- Mehrere asynchrone Operationen zu einer zusammenzufassen ist schwierig
+  - Wenn N Dinge passiert sind, rufe den Callback auf
+  - Wenn eins von N Dingen passiert ist, rufe den Callback auf
+- Fehlerbehandlung ist sehr manuell
+  - Uncaught Exceptions sind schwer zuzuordnen
+
+---
+
+# Promises: Die Idee
+
+- Ein `Promise` ist ein Objekt dass das Ergebnis einen asynchronen Operation darstellt
+- Es ist entweder „pending“, „fulfilled“, oder „rejected“
+  - Manchmal wird „fulfilled oder rejected“ als „resolved“ zusammengefasst
+- `.then()` wird benutzt um das Ergebnis zu verarbeiten → Gibt ein kombiniertes `Promise`
+- `.catch()` wird benutzt um Fehler zu verarbeiten → Gibt auch ein kombiniertes `Promise`
+
+---
+
+# Promises direkt verwenden
+
+```js
+const fs = require('fs').promises;
+
+function readFile(filename) {
+  let content;
+  return fs.open(filename).then((handle) => {
+    return handle.readFile({ encoding: 'utf8' });
+  }).then((readContent) => {
+    content = readContent;
+    return handle.close();
+  }).then(() => {
+    return content;
+  });
+}
+```
+
+---
+
+# Die Promise-API
+
+```js
+const fs = require('fs').promises;
+
+const promise = fs.readFile('filename');
+// Mach etwas nach dem Erfolg einer Operation; das Ergebnis ist ein neues Promise:
+promise.then((content) => {
+  return fs.writeFile('other-filename', content);
+}).then(() => {
+  console.log('copied file');
+}).catch((err) => {
+  // Falls in *irgendeinem* Schritt ein Fehler auftrat, wird diese Funktion aufgerufen.
+  console.log('error', err);
+});
+```
+
+---
+
+# Die Promise-API (Variante II)
+
+```js
+const fs = require('fs').promises;
+
+const promise = fs.readFile('filename');
+// Mach etwas nach dem Erfolg einer Operation; das Ergebnis ist ein neues Promise:
+promise.then((content) => {
+  return fs.writeFile('other-filename', content);
+}).then(() => {
+  console.log('copied file');
+}, (err) => {  // Kein .catch(), aber ein zweites Argument für .then()
+  // Falls in *writeFile* ein Fehler auftrat, wird diese Funktion aufgerufen.
+  // Fehler von z. B. console.log() würden nicht abgefangen.
+  console.log('error', err);
+});
+```
+
+---
+
+# Syntactic Sugar: async/await
+
+(Seit Node.js 8)
+
+```js
+const fs = require('fs').promises;
+
+async function copyFile(from, to) {
+  const content = await fs.readFile(from);
+  await handle.writeFile(to, content);
+}
+
+async function doSomethingThatCopiesAFile() {
+  ...
+  await copyFile('filename1', 'filename2');
+  ...
+}
+```
+
+---
+
+# Promises erzeugen, Teil I
+
+- `new Promise((resolve, reject) => { ... })`
+
+```js
+function readFilePromise(filename) {
+  return new Promise((resolve, reject) => {
+    fs.readFile('filename', (err, content) => {
+      if (err)
+        reject(err);
+      // resolve() kann mit einem Promise oder einem Ergebniswert aufgerufen werden
+      resolve(content);
+    });
+  });
+}
+```
+
+---
+
+# Promises erzeugen, Teil II
+
+Shortcuts, die direkt zu `resolve()` oder `reject()` abkürzen:
+
+- `Promise.resolve(value)`  (Falls `value` ein Promise ist, wird das verwendet)
+- `Promise.reject(value)`
+
+```js
+Promise.resolve(42).then((value) => {
+  console.log(value);
+});
+
+Promise.reject(new Error('foo')).then((value) => {
+  // Wird nicht aufgerufen!
+}).catch((err) => {
+  console.log('error', err);
+});
+```
+
+---
+
+# Promises erzeugen, Teil III
+
+- `Promise.all(array)`: Wartet bis *alle* Promises fertig sind, gibt alle Ergebnisse zurück
+  - Falls eine Rejection auftritt, wird nur die erste weitergegeben!
+- `Promise.race(array)`: Wartet bis *ein* Promise fertig ist, gibt dessen Ergebnis zurück
+
+```js
+const dns = require('dns').promises;
+
+async function lookupHostnames(hostnames) {
+  const promises = hostnames.map(hostname => dns.lookup(hostname));
+  const results = await Promise.all(promises);
+  return results;
+}
+```
+
+---
+
+# async/await: Magic!
+
+```js
+async function fibonacci(n) {
+  if (n &lt;= 1) return 1;
+  return await fibonacci(n - 1) + await fibonacci(n - 2);
+}
+
+... wird (ungefähr) zu ...
+
+function fibonacci(n) {
+  if (n &lt;= 1) return Promise.resolve(1);
+  return Promise.resolve(fibonacci(n - 1)).then((value1) => {
+    return Promises.resolve(fibonacci(n - 2)).then((value2) => {
+      return value1 + value2;
+    });
+  });
+}
+```
+
+---
+
+# Vorgefertigte Promise-Style APIs
+
+- Viele npm-Libraries unterstützen Promises „out of the box“
+- In Node.js selbst: `fs.promises`, `dns.promises`
+- `util.promisify()`:
+
+```js
+const wait = util.promisify(setTimeout), exec = util.promisify(child_process.exec);
+
+async function lsWithTimeout(timeout) {
+  const result = await Promise.race([exec('ls'), wait(timeout)]);
+
+  if (result === undefined) throw new Error('timeout!');
+  if (result.stderr) throw new Error(result.stderr);
+  return result.stdout.trim().split('\n');
+}
+
+lsWithTimeout(20).then(console.log);
+```
+
+---
+
+# Advanced: Async generators
+
+- `async function* foo() { ... }` liefert die Möglichkeit, eine Sequenz asynchron zu erstellen
+- Wird als `for await (const entry of foo()) { ... }` benutzt
+- Von Node.js-Streams unterstützt:
+
+```js
+process.stdin.setEncoding('utf8');
+for await (const chunk of process.stdin) {
+  process.stdout.write(chunk);
+}
+```
+
+---
+
+# Timing: Nichts passiert synchron
+
+```js
+const promise = ...;
+
+console.log('A');
+promise.then(() => {
+  console.log('B');
+});
+console.log('C');
+
+// Output: A, C, B
+```
+
+---
+
+# Pitfalls
+
+- Sichergehen dass ein Handler mit `.catch()` letztendlich vorhanden ist!
+  - Rejections ohne `.catch()` gehen „verloren“
+  - Rejections ohne synchrones `.catch()` erzeugen in Node.js zur Zeit eine Warnung
+- Nicht jede Funktion `async` machen nur weil es geht – Performance-Bottleneck
+
+---
+
+# Top-Level-Await
+
+`await` funktioniert zur Zeit nur innerhalb von `async function`s, sorry!
+
+```js
+(async function() {
+  ...
+})().catch((err) => {
+  ...
+});
+```
+
+Ausname: REPL mit `node --experimental-repl-await`:
+
+```sh
+$ node --experimental-repl-await
+> await Promise.resolve(42)
+42
+```
+
+---
+
+# Danke!
+
+- https://twitter.com/addaleax/
+- https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Promise
+
+Slides @ https://addaleax.net/promises-talk/
+
+    </textarea>
+
+    <script src="remark-latest.min.js">
+    </script>
+    <script>
+      var slideshow = remark.create({ratio: '16:9'});
+  document.getElementById('workers-design-target').appendChild(
+  document.getElementById('workers-design').cloneNode(true))
+    </script>
+  </body>
+</html>
